@@ -19,15 +19,14 @@ def decrypt(ciphertext: bytes, key: bytes):
 
 
 key = prg(b"ola mundo cruel",1)
-
-print("len(key):",len(key))
-print("key:",key)
-
 ct = encrypt(b"olaolaol",key)
 msg = decrypt(ct,key)
 
-print("len(ct):",len(ct))
-print("ct:",ct)
+# print("len(key):",len(key))
+# print("key:",key)
 
-print("len(msg):",len(msg))
-print("msg:",msg)
+# print("len(ct):",len(ct))
+# print("ct:",ct)
+
+# print("len(msg):",len(msg))
+# print("msg:",msg)
