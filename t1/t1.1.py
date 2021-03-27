@@ -2,13 +2,16 @@ from threading import Thread
 from queue import Queue
 import os
 
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-# Diffie-Hellman
-from cryptography.hazmat.primitives.asymmetric import dh
+
+# Diffie-Hellman & DSA
+from cryptography.hazmat.primitives.asymmetric import dh, dsa
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.serialization import Encoding, ParameterFormat, PublicFormat
 
 class Logger:
     def __init__(self,name):
@@ -24,24 +27,34 @@ class Logger:
         print("[{}] > {}".format(self.thread_name,msg))
 
 
-def encrypt(message,key,metadata):
-    iv = os.urandom(12)
-    encryptor = Cipher(
-        algorithms.AES(key),
-        modes.GCM(iv)
-    ).encryptor()
-    encryptor.authenticate_additional_data(metadata)
+def encrypt(message,key):
+    # Encrypt-and-MAC method
+    h = hmac.HMAC(key, hashes.SHA256())
+    h.update(message)
+    mac = h.finalize()
+
+    # AES CTR mode
+    nounce = os.urandom(16)
+    cipher = Cipher(algorithms.AES(key), modes.CTR(nounce))
+    encryptor = cipher.encryptor()
     ciphertext = encryptor.update(message) + encryptor.finalize()
-    return (iv,ciphertext,encryptor.tag)
 
-def decrypt(iv,cipher,key,tag,metadata):
-    decryptor = Cipher(
-        algorithms.AES(key),
-        modes.GCM(iv, tag),
-    ).decryptor()
-    decryptor.authenticate_additional_data(metadata)
-    return decryptor.update(cipher) + decryptor.finalize()
+    return (nounce,ciphertext,mac)
 
+def decrypt(nounce_ciphertext_mac,key):
+    nounce = nounce_ciphertext_mac[0]
+    ciphertext = nounce_ciphertext_mac[1]
+    mac = nounce_ciphertext_mac[2]
+
+    cipher = Cipher(algorithms.AES(key), modes.CTR(nounce))
+    decryptor = cipher.decryptor()
+    message = decryptor.update(ciphertext) + decryptor.finalize()
+    
+    h = hmac.HMAC(key, hashes.SHA256())
+    h.update(message)
+    h.verify(mac)
+    
+    return message
 
 
 # Emitter thread function
@@ -54,39 +67,57 @@ def emitter(channel):
     # Emiter generates some DH parameters and sends to Receiver
     parameters = dh.generate_parameters(generator=2, key_size=1024)
     logger.log("Generated parameters")
-    channel.e2r.put(parameters)
+
+    signature = emitter_dsa_private_key.sign(
+        parameters.parameter_bytes(Encoding.DER,ParameterFormat.PKCS3),
+        hashes.SHA256()
+    )
+    channel.e2r.put((parameters,signature))
     logger.sent("DH parameters")
 
     # Entities generate both private and public keys
     private_key = parameters.generate_private_key()
-    logger.log("Generated private key")
     public_key = private_key.public_key()
     logger.log("Generated public key")
         
     # Send public_key to other peer
-    channel.e2r.put(public_key)
+    signature = emitter_dsa_private_key.sign(
+        public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+        hashes.SHA256()
+    )
+    channel.e2r.put((public_key,signature))
 
     # Receive other peer's public_key
-    peer_public_key = channel.r2e.get()
+    peer_public_key, signature = channel.r2e.get()
+    try:
+        receiver_dsa_public_key.verify(
+            signature,
+            peer_public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+            hashes.SHA256()
+        )
+    except InvalidSignature:
+        logger.log("Invalid signature for Peer Public Key")
 
     # Derive shared key
     shared_key = private_key.exchange(peer_public_key)
-    derived_key = HKDF(
+    key = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=b"handshake data",
+        info=None,
     ).derive(shared_key)
 
     # End Diffie-Hellman Key Exchange
     
-    logger.log(derived_key)
+    logger.log(key)
 
-    #msg = b"Hello World!"
-    #channel.e2r.put(msg)
-    #logger.sent(msg)
-    #msg = channel.r2e.get()
-    #logger.sent(msg)
+    msg = b"Hello World!"
+    nounce_ct = encrypt(msg,key)
+    logger.log("Encrypted: {}".format(nounce_ct))
+    channel.e2r.put(nounce_ct)
+
+
+
 
 # Receiver thread function
 def receiver(channel):
@@ -96,45 +127,71 @@ def receiver(channel):
     #### Start Diffie-Hellman Key Exchange ####
 
     # Get Emitter DH parameters
-    parameters = channel.e2r.get()
+    parameters, signature = channel.e2r.get()
+    try:
+        emitter_dsa_public_key.verify(
+            signature,
+            parameters.parameter_bytes(Encoding.DER,ParameterFormat.PKCS3),
+            hashes.SHA256()
+        )
+    except InvalidSignature:
+        logger.log("Invalid signature for DH parameters")
     logger.received("DH parameters")
     
     private_key = parameters.generate_private_key()
-    logger.log("Generated private key")
     public_key = private_key.public_key()
-    logger.log("Generated public key")
+    logger.log("Generated private and public key")
 
     # Send public_key to other peer
-    channel.r2e.put(public_key)
+    signature = receiver_dsa_private_key.sign(
+        public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+        hashes.SHA256()
+    )
+    channel.r2e.put((public_key,signature))
 
     # Receive other peer's public_key
-    peer_public_key = channel.e2r.get()
+    peer_public_key, signature = channel.e2r.get()
+    try:
+        emitter_dsa_public_key.verify(
+            signature,
+            peer_public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+            hashes.SHA256()
+        )
+    except InvalidSignature:
+        logger.log("Invalid signature for Peer Public Key")
 
     # Derive shared key
     shared_key = private_key.exchange(peer_public_key)
-    derived_key = HKDF(
+    key = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=b"handshake data",
+        info=None,
     ).derive(shared_key)
 
     ##### End Diffie-Hellman Key Exchange ####
 
-    logger.log(derived_key)
+    logger.log(key)
 
-    #msg = channel.e2r.get()
-    #logger.received(msg)
-    #msg = b"Ack"
-    #channel.r2e.put(msg)
-    #logger.sent(msg)
+    nounce_ct = channel.e2r.get()
+    try:
+        message = decrypt(nounce_ct,key)
+        logger.log("Decrypted: {}".format(message))
+    except InvalidSignature:
+        logger.log("Invalid MAC")
 
-#pwd = bytes(input("Shared Password > "),"utf-8")
 
 class Channel:
     def __init__(self):
         self.e2r = Queue(5)
         self.r2e = Queue(5)
+
+
+emitter_dsa_private_key = dsa.generate_private_key(key_size=1024)
+emitter_dsa_public_key = emitter_dsa_private_key.public_key()
+
+receiver_dsa_private_key = dsa.generate_private_key(key_size=1024)
+receiver_dsa_public_key = receiver_dsa_private_key.public_key()
 
 channel = Channel()
 
