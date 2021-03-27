@@ -57,13 +57,10 @@ def decrypt(nounce_ciphertext_mac,key):
     return message
 
 
-# Emitter thread function
-def emitter(channel):
-    logger = Logger("Emitter")
-    logger.log("Logger initialized")
-
-    # Start Diffie-Hellman Key Exchange
-
+# Diffie-Hellman Key Exchange
+def emitter_key_exchange(channel,logger):
+    global emitter_dsa_private_key
+    global receiver_dsa_public_key
     # Emiter generates some DH parameters and sends to Receiver
     parameters = dh.generate_parameters(generator=2, key_size=1024)
     logger.log("Generated parameters")
@@ -107,7 +104,15 @@ def emitter(channel):
         info=None,
     ).derive(shared_key)
 
-    # End Diffie-Hellman Key Exchange
+    return key
+
+
+# Emitter thread function
+def emitter(channel):
+    logger = Logger("Emitter")
+    logger.log("Logger initialized")
+
+    key = emitter_key_exchange(channel,logger)
     
     logger.log(key)
 
