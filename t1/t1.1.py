@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
 # Diffie-Hellman & DSA
-from cryptography.hazmat.primitives.asymmetric import dh, dsa
+from cryptography.hazmat.primitives.asymmetric import dh, dsa, ec
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import Encoding, ParameterFormat, PublicFormat
 
@@ -75,7 +75,7 @@ def emitter_key_exchange(channel,logger):
     # Entities generate both private and public keys
     private_key = parameters.generate_private_key()
     public_key = private_key.public_key()
-    logger.log("Generated public key")
+    logger.log("Generated private and public key")
         
     # Send public_key to other peer
     signature = emitter_dsa_private_key.sign(
@@ -106,13 +106,52 @@ def emitter_key_exchange(channel,logger):
 
     return key
 
+# Elliptic Curve Key Exchange
+def emitter_ec_key_exchange(channel,logger):
+    global emitter_dsa_private_key
+    global receiver_dsa_public_key
+
+    # Entities generate both private and public key
+    private_key = ec.generate_private_key(ec.SECP384R1())
+    public_key = private_key.public_key()
+    logger.log("Generated private and public key")
+
+    # Send public_key to other peer
+    signature = emitter_dsa_private_key.sign(
+        public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+        hashes.SHA256()
+    )
+    channel.e2r.put((public_key,signature))
+
+    # Receive other peer's public_key
+    peer_public_key, signature = channel.r2e.get()
+    try:
+        receiver_dsa_public_key.verify(
+            signature,
+            peer_public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+            hashes.SHA256()
+        )
+    except InvalidSignature:
+        logger.log("Invalid signature for Peer Public Key")
+
+    # Derive shared key
+    shared_key = private_key.exchange(ec.ECDH(),peer_public_key)
+    key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=None,
+    ).derive(shared_key)
+
+    return key
+
 
 # Emitter thread function
 def emitter(channel):
     logger = Logger("Emitter")
     logger.log("Logger initialized")
 
-    key = emitter_key_exchange(channel,logger)
+    key = emitter_ec_key_exchange(channel,logger)
     
     logger.log(key)
 
@@ -123,13 +162,10 @@ def emitter(channel):
 
 
 
-
-# Receiver thread function
-def receiver(channel):
-    logger = Logger("Receiver")
-    logger.log("Logger initialized")
-
-    #### Start Diffie-Hellman Key Exchange ####
+# Diffie-Hellman Key Exchange
+def receiver_key_exchange(channel,logger):
+    global receiver_dsa_private_key
+    global emitter_dsa_public_key
 
     # Get Emitter DH parameters
     parameters, signature = channel.e2r.get()
@@ -143,6 +179,7 @@ def receiver(channel):
         logger.log("Invalid signature for DH parameters")
     logger.received("DH parameters")
     
+    # Entities generate both private and public key
     private_key = parameters.generate_private_key()
     public_key = private_key.public_key()
     logger.log("Generated private and public key")
@@ -174,7 +211,55 @@ def receiver(channel):
         info=None,
     ).derive(shared_key)
 
-    ##### End Diffie-Hellman Key Exchange ####
+    return key
+
+
+# Elliptic Curve Key Exchange
+def receiver_ec_key_exchange(channel,logger):
+    global receiver_dsa_private_key
+    global emitter_dsa_public_key
+
+    # Entities generate both private and public key
+    private_key = ec.generate_private_key(ec.SECP384R1())
+    public_key = private_key.public_key()
+    logger.log("Generated private and public key")
+
+    # Send public_key to other peer
+    signature = receiver_dsa_private_key.sign(
+        public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+        hashes.SHA256()
+    )
+    channel.r2e.put((public_key,signature))
+
+    # Receive other peer's public_key
+    peer_public_key, signature = channel.e2r.get()
+    try:
+        emitter_dsa_public_key.verify(
+            signature,
+            peer_public_key.public_bytes(Encoding.DER,PublicFormat.SubjectPublicKeyInfo),
+            hashes.SHA256()
+        )
+    except InvalidSignature:
+        logger.log("Invalid signature for Peer Public Key")
+
+    # Derive shared key
+    shared_key = private_key.exchange(ec.ECDH(),peer_public_key)
+    key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=None,
+    ).derive(shared_key)
+
+    return key
+
+
+# Receiver thread function
+def receiver(channel):
+    logger = Logger("Receiver")
+    logger.log("Logger initialized")
+
+    key = receiver_ec_key_exchange(channel,logger)
 
     logger.log(key)
 
