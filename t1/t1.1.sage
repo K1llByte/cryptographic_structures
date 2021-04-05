@@ -105,31 +105,23 @@ def digest(msg):
 
 
 class ECDSA:
-    
-    ####### Constants #######
-
-    #F = FiniteField(2**192 - 2**64 - 1)
-    #a  = -3
-    #b  = 0x64210519E59C80E70FA7E9AB72243049FEB8DEECC146B9B1
-    #E  = EllipticCurve(F, [a, b])
-    #P  = E((0x188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012,0x07192B95FFC8DA78631011ED6B24CDD573F977A11E794811))
-    #n  = 0xFFFFFFFFFFFFFFFFFFFFFFFF99DEF836146BC9B1B4D22831
-    #Fn = FiniteField(n)
-    
     ####### Constructors #######
     
     def __init__(self):
-        # Curva e parameterização
+        # link auxiliar: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf
+        # Curva e parameterização P192
         self.F = FiniteField(2**192 - 2**64 - 1)
-        self.a  = -3
-        self.b  = 0x64210519E59C80E70FA7E9AB72243049FEB8DEECC146B9B1
-        self.E  = EllipticCurve(self.F, [self.a, self.b])
-        self.P  = self.E((0x188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012,0x07192B95FFC8DA78631011ED6B24CDD573F977A11E794811))
+        b  = 0x64210519E59C80E70FA7E9AB72243049FEB8DEECC146B9B1
+        E  = EllipticCurve(self.F, [-3, b])
+        self.G = E((0x188DA80EB03090F67CBF20EB43A18800F4FF0AFD82FF1012,0x07192B95FFC8DA78631011ED6B24CDD573F977A11E794811))
+        # order n
         self.n  = 0xFFFFFFFFFFFFFFFFFFFFFFFF99DEF836146BC9B1B4D22831
         self.Fn = FiniteField(self.n)
 
         self.d = randint(1, self.n - 1)
-        self.Q = self.d * self.P
+        self.Q = self.d * self.G
+
+    ######## Getters ########
 
     def public_key(self):
         return self.Q
@@ -141,7 +133,7 @@ class ECDSA:
             k = 1
             while r == 0:
                 k = randint(1, self.n - 1)
-                n_Q = k * self.P
+                n_Q = k * self.G
                 (x1, y1) = n_Q.xy()
                 r = self.Fn(x1)
             kk = self.Fn(k)
@@ -149,6 +141,7 @@ class ECDSA:
             s = kk ^ (-1) * (e + self.d * r)
         return [r, s]
 
+    ##### Sign & Verify #####
 
     def verify(self, m, rs):
         r = rs[0]
@@ -157,7 +150,7 @@ class ECDSA:
         w = s ^ (-1)
         u1 = (e * w)
         u2 = (r * w)
-        P1 = Integer(u1) * self.P
+        P1 = Integer(u1) * self.G
         P2 = Integer(u2) * self.Q
         X = P1 + P2
         (x, y) = X.xy()
