@@ -13,7 +13,7 @@ class DSA:
 
     FULL = 0
     PUBLIC_KEY = 1
-    
+
     ####### Constructors #######
 
     def __init__(self,L,N):
