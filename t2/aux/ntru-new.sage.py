@@ -12,53 +12,55 @@ q = next_prime(_sage_const_1500 )
 
 _Z = ZZ['w']; (w,) = _Z._first_ngens(1)
 R = QuotientRing(_Z , _Z.ideal(w**N - _sage_const_1 ), names=('w',)); (w,) = R._first_ngens(1)
-print(R)
+#print(R)
 
 _Q = Integers(q)['w']; (w,) = _Q._first_ngens(1)
 Rq = QuotientRing(_Q , _Q.ideal(w**N - _sage_const_1 ), names=('w',)); (w,) = Rq._first_ngens(1)
-print(Rq)
+#print(Rq)
 
 # Mensagem é dada num intervalo de coeficientes [0, q-1],
 # por isso o modulo dos valores tem de ser recentrados
-# para o intervalo [-q/2, q/2].b
+# para o intervalo [-q/2, q/2-1].
 def centered(l,p):
+    print("1>",l)
     fp = [ lift(Mod(a,p)) for a in l ]
-    return [u if (u <= p//_sage_const_2 ) else u-p for u in fp ]
-
-def to_list(f):
-    return list(f)
+    print("2>",fp)
+    tmp = [u if (u <= p//_sage_const_2 ) else u-p for u in fp ]
+    print("3>",tmp)
+    print()
+    return tmp
 
 class NTRU:
     def __init__(self, N, p, q):
         self.N = N
         self.p = p
         self.q = q
+        # KeyGen on initialization
+        # f tem de ser invertivel
         while True:
-            self.f = _sage_const_1  + self.p * R(self.random_poly())
-            self.g = self.p * R(self.random_poly())
-            try:
-                fq = Rq(to_list(self.f)).inverse_of_unit()
-                hq = fq * Rq(to_list(self.g))
-                self.h = R([lift(a) for a in list(hq)])
+            self.f = _sage_const_1  + self.p * R(self.random_polyS3())
+            if Rq(list(self.f)).is_unit():
                 break
-            except ZeroDivisionError:
-                pass
+        self.g = self.p * R(self.random_polyS3())
+        fq = Rq(list(self.f)).inverse_of_unit()
+        hq = fq * Rq(list(self.g))
+        self.h = R([lift(a) for a in list(hq)])
 
     def encrypt(self, msg):
-        r = R(self.random_poly())
+        r = R(self.random_polyS3())
         m = R(msg)
-        return centered(to_list(self.h*r + m), self.q)
+        return centered(list(self.h*r + m), self.q)
 
     def decrypt(self, enc):
         e = R(enc)
-        a = centered(to_list(self.f * e), self.q)
-        return centered(to_list(R(a)),self.p)
+        a = centered(list(self.f * e), self.q)
+        return centered(list(R(a)),self.p)
 
-    def random_poly(self):
+    def random_polyS3(self):
         return [choice([-_sage_const_1 ,_sage_const_0 ,_sage_const_1 ]) for i in range(self.N)]
 
 bob = NTRU(N,p,q)
-msg = bob.random_poly()
+msg = bob.random_polyS3()
 enc = bob.encrypt(msg)
 dec = bob.decrypt(enc)
 print(msg == dec)

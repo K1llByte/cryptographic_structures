@@ -1,8 +1,11 @@
 from random import choice
 
-N = next_prime(1000)
+# This implementation is based on the NTRU HPS 2048509
+
+N = 509
 p = 3
-q = next_prime(1500)
+log_q = 11
+q = 1 << log_q # 2048
 
 _Z.<w>  = ZZ[]
 R.<w>   = QuotientRing(_Z , _Z.ideal(w^N - 1))
@@ -12,9 +15,6 @@ _Q.<w>  = Integers(q)[]
 Rq.<w>  = QuotientRing(_Q , _Q.ideal(w^N - 1))
 #print(Rq)
 
-# Mensagem é dada num intervalo de coeficientes [0, q-1],
-# por isso o modulo dos valores tem de ser recentrados
-# para o intervalo [-q/2, q/2].b
 def centered(l,p):
     fp = [ lift(Mod(a,p)) for a in l ]
     return [u if (u <= p//2) else u-p for u in fp ]
