@@ -56,8 +56,6 @@ class NTRU:
         rm = self.random_polyS3()
         sha3 = hashes.Hash(hashes.SHA3_256())
         bytes([ c + self.p // 2 for c in rm ])
-        #for c in rm:
-            # sha3.update(bytes(c + self.p // 2))
         sha3.update(bytes([ c + self.p // 2 for c in rm ]))
         shared_key = sha3.finalize()
         return (shared_key, self.encrypt(rm))
@@ -65,8 +63,6 @@ class NTRU:
     def decapsulate(self,cipher):
         rm = self.decrypt(cipher)
         sha3 = hashes.Hash(hashes.SHA3_256())
-        # for c in rm:
-            # sha3.update(bytes(c + self.p // 2))
         sha3.update(bytes([ c + self.p // 2 for c in rm ]))
         shared_key = sha3.finalize()
         return shared_key
@@ -85,5 +81,4 @@ print(msg == dec)
 # NTRU KEM Test
 bob_shared_secret, enc = ntru.encapsulate()
 alice_shared_secret = ntru.decapsulate(enc)
-print(bob_shared_secret)
 print(bob_shared_secret == alice_shared_secret)
