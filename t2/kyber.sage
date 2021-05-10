@@ -17,3 +17,15 @@ class KyberPKE:
     def __init__(self):
         self.q = 3329
         self.n = 256
+
+    def encrypt(self):
+        pass
+
+    def decrypt(self):
+        pass
+
+    def encapsulate(self):
+        pass
+
+    def decapsulate(self):
+        pass
