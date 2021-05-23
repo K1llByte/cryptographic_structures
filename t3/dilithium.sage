@@ -1,5 +1,5 @@
 from cryptography.hazmat.primitives import hashes 
-import os
+import time
 
 class Weak:
     k = 3
@@ -29,8 +29,6 @@ class VeryHigh:
     beta = 175
     omega = 120
 
-class InvalidSignature(Exception):
-    pass
 
 class Dilithium:
     def __init__(self, params=Recommended):
@@ -66,24 +64,30 @@ class Dilithium:
             # Ay é reutilizado por isso precalcula-se
             Ay = self.A * y
             w1 = self.high_bits(self.A * y, 2 * self.gamma2)
-            c = self.H(bytes([ int(i) for i in w1 ]) + m)
+            c = self.H(b"".join([bytes([ int(i) for i in e ]) for e in w1]) + m)
             c_poly = self.Rq(c)
             z = y + c_poly * self.s1
-            torf1 = self.norm(z) >= self.gamma1 - self.beta
-            aux1 = self.low_bits(Ay-c_poly*self.s2, 2*self.gamma2)
-            print(aux1)
-            print("left",self.norm([[aux1]]))
-            print("right",self.gamma2-self.beta)
-            torf2 = self.norm([[aux1]]) >= self.gamma2-self.beta
-            if torf1 or torf2:
+
+            aux11 = self.sup_norm(z)
+            aux12 = self.gamma1 - self.beta
+            torf1 = aux11 >= aux12
+
+            tmp = self.low_bits(Ay-c_poly*self.s2, 2*self.gamma2)
+            aux21 = self.sup_norm([tmp])
+            aux22 = self.gamma2 - self.beta
+            torf2 = aux21 >= aux22
+
+            if torf1 and torf2:
                z = None
         return (z,c)
 
 
     def verify(self, m, sig):
         (z,c) = sig
-        w1_ = self.high_bits(A*z - Rq(c)*self.t, 2*self.gamma2)
-        return (self.norm(z) < self.gamma1-self.beta) and (c == self.H(bytes([ int(i) for i in w1_ ]) + m))
+        w1_ = self.high_bits(self.A*z - self.Rq(c)*self.t, 2*self.gamma2)
+        torf1 = (self.sup_norm(z) < self.gamma1-self.beta)
+        torf2 = (c == self.H(b"".join([bytes([ int(i) for i in e ]) for e in w1_]) + m))
+        return torf1 and torf2
 
     ########### Auxiliar Functions ###########
 
@@ -122,6 +126,7 @@ class Dilithium:
         #      r1 r0
         r0_vector = []
         r1_vector = []
+        torf = True
         for p in r:
             r0_poly = []
             r1_poly = []
@@ -135,12 +140,15 @@ class Dilithium:
                     r1 = (c - r0) / int(alfa)
                 r0_poly.append(r0)
                 r1_poly.append(r1)
+            if torf:
+                #print("AAAAAAAAAAAAAAAAA",self.Rq(r0_poly))
+                torf = False
             r0_vector.append(self.Rq(r0_poly))
             r1_vector.append(self.Rq(r1_poly))
         # Como já não vamos realizar mais operações
         # sobre matrizes então podemos apenas utilizar
         # listas de python para estes vectors
-        return (r1_poly, r0_poly)
+        return (r1_vector, r0_vector)
 
     def H(self, obj):
         sha3 = hashes.Hash(hashes.SHAKE256(int(60)))
@@ -148,11 +156,48 @@ class Dilithium:
         res = [ (-1) ** (b % 2) for b in sha3.finalize() ]
         return res + [0]*196
 
-    def norm(self, v, debug=False):
-        if debug:
-            print("v[0]",v[0])
-            print("v[0][0]",v[0][0])
+    # https://en.wikipedia.org/wiki/Uniform_norm
+    def sup_norm(self, v):
         return max([ max(p[0]) for p in v])
 
+######## Tests ########
+
+# Test 1
+# Verificar se o esquema valida
+# corretamente uma assinatura
 dilithium = Dilithium(params=Weak)
-dilithium.sign(b"ola mundo cruel")
+sig = dilithium.sign(b"ola mundo cruel")
+print("Test 1 (Must be True):",dilithium.verify(b"ola mundo cruel", sig))
+
+# Test 2
+# Verificar se o esquema reconhece quando
+# os dados assinados são diferentes
+sig = dilithium.sign(b"ola mundo cruel")
+print("Test 2 (Must be False):",dilithium.verify(b"adeus mundo cruel", sig))
+
+# Test 3
+# Verificar se entre instancias diferentes
+# não há relações
+dilithium_other = Dilithium(params=Weak)
+sig = dilithium.sign(b"ola mundo cruel")
+print("Test 3 (Must be False):",dilithium_other.verify(b"ola mundo cruel",sig))
+
+######## Benchmarks ########
+
+# def benchmark(foo):
+#     start = time.time()
+#     foo()
+#     end = time.time()
+#     return end - start
+
+# def sign_verify(params):
+#     def __benchmark_test():
+#         dilithium = Dilithium(params=params)
+#         sig = dilithium.sign(b"ola mundo cruel")
+#         dilithium.verify(b"ola mundo cruel", sig)
+#     return __benchmark_test
+
+# print("sign_verify for Weak params:",benchmark(sign_verify(Weak)))
+# print("sign_verify for Medium params:",benchmark(sign_verify(Medium)))
+# print("sign_verify for Recommended params:",benchmark(sign_verify(Recommended)))
+# print("sign_verify for VeryHigh params:",benchmark(sign_verify(VeryHigh)))
