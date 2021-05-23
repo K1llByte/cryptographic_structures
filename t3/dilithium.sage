@@ -60,13 +60,30 @@ class Dilithium:
         # Private Key : s1, s2    
 
     def sign(self, m):
-        y = self.sample(self.gamma1-1, self.l)
-        w1 = self.high_bits(self.A * y, 2 * self.gamma2)
+        z = None
+        while z == None:
+            y = self.sample(self.gamma1-1, self.l)
+            # Ay é reutilizado por isso precalcula-se
+            Ay = self.A * y
+            w1 = self.high_bits(self.A * y, 2 * self.gamma2)
+            c = self.H(bytes([ int(i) for i in w1 ]) + m)
+            c_poly = self.Rq(c)
+            z = y + c_poly * self.s1
+            torf1 = self.norm(z) >= self.gamma1 - self.beta
+            aux1 = self.low_bits(Ay-c_poly*self.s2, 2*self.gamma2)
+            print(aux1)
+            print("left",self.norm([[aux1]]))
+            print("right",self.gamma2-self.beta)
+            torf2 = self.norm([[aux1]]) >= self.gamma2-self.beta
+            if torf1 or torf2:
+               z = None
+        return (z,c)
 
-        #print(w1)
 
-    def verify(self):
-        pass
+    def verify(self, m, sig):
+        (z,c) = sig
+        w1_ = self.high_bits(A*z - Rq(c)*self.t, 2*self.gamma2)
+        return (self.norm(z) < self.gamma1-self.beta) and (c == self.H(bytes([ int(i) for i in w1_ ]) + m))
 
     ########### Auxiliar Functions ###########
 
@@ -102,35 +119,40 @@ class Dilithium:
         # Nota: Na submissão original é assumido
         # que as operações no decompose são aplicadas
         # a cada coeficiente.
-        res = ([],[])
+        #      r1 r0
+        r0_vector = []
+        r1_vector = []
         for p in r:
             r0_poly = []
             r1_poly = []
-            for c in p:
-                print("c",c)
-                c = mod(c,int(self.q))
-                r0 = mod(c,int(alfa))
-                if c - r0 == self.q - 1:
+            for c in p[0]:
+                c = int(mod(c,int(self.q)))
+                r0 = int(mod(c,int(alfa)))
+                if c - r0 == int(self.q) - int(1):
                     r1 = 0
                     r0 = r0 - 1
                 else:
-                    r1 = (r - r0) / int(alfa)
-                r0_poly.push(r0)
-                r1_poly.push(r1)
-        return (Rq(r1_poly),Rq(r0_poly))
+                    r1 = (c - r0) / int(alfa)
+                r0_poly.append(r0)
+                r1_poly.append(r1)
+            r0_vector.append(self.Rq(r0_poly))
+            r1_vector.append(self.Rq(r1_poly))
+        # Como já não vamos realizar mais operações
+        # sobre matrizes então podemos apenas utilizar
+        # listas de python para estes vectors
+        return (r1_poly, r0_poly)
+
+    def H(self, obj):
+        sha3 = hashes.Hash(hashes.SHAKE256(int(60)))
+        sha3.update(obj)
+        res = [ (-1) ** (b % 2) for b in sha3.finalize() ]
+        return res + [0]*196
+
+    def norm(self, v, debug=False):
+        if debug:
+            print("v[0]",v[0])
+            print("v[0][0]",v[0][0])
+        return max([ max(p[0]) for p in v])
 
 dilithium = Dilithium(params=Weak)
-dilithium.sign(None)
-
-
-
-######################################################
-
-#def H(zeta):
-#    sha3 = hashes.Hash(hashes.SHAKE256(int(32)))
-#    sha3.update(zeta)
-#    return sha3.finalize() 
-
-#zeta = os.urandom(32)
-
-#print(H(zeta))
+dilithium.sign(b"ola mundo cruel")
