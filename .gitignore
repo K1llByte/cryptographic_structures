@@ -1,2 +1,4 @@
 .ipynb_checkpoints/
 t*_env/
+
+*.sage.py

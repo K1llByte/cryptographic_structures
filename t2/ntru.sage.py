@@ -19,15 +19,13 @@ R = QuotientRing(Z , Z.ideal(w**N - _sage_const_1 ), names=('w',)); (w,) = R._fi
 
 Q = Integers(q)['w']; (w,) = Q._first_ngens(1)
 Rq = QuotientRing(Q , Q.ideal(w**N - _sage_const_1 ), names=('w',)); (w,) = Rq._first_ngens(1)
-#print(Rq)
 
 # Mensagem é dada num intervalo de coeficientes [0, q-1],
 # por isso o modulo dos valores tem de ser recentrados
 # para o intervalo [-q/2, q/2-1].
 def centered(l,p):
     fp = [ lift(Mod(a,p)) for a in l ]
-    tmp = [ u if (u <= p//_sage_const_2 ) else u-p for u in fp ]
-    return tmp
+    return [ u if (u <= p//_sage_const_2 ) else u-p for u in fp ]
 
 class NTRU:
     def __init__(self, N, p, q):
@@ -80,13 +78,21 @@ class NTRU:
 ntru = NTRU(N,p,q)
 
 # NTRU PKE Test
-msg = ntru.random_poly_ternary()
-enc = ntru.encrypt(msg)
-dec = ntru.decrypt(enc)
-print("NTRU PKE Test:",msg == dec)
+# msg = ntru.random_poly_ternary()
+# enc = ntru.encrypt(msg)
+# dec = ntru.decrypt(enc)
+# print("NTRU PKE Test:",msg == dec)
 
-# NTRU KEM Test
-bob_shared_secret, enc = ntru.encapsulate()
-alice_shared_secret = ntru.decapsulate(enc)
-print("NTRU KEM Test:",bob_shared_secret == alice_shared_secret)
+# # NTRU KEM Test
+# bob_shared_secret, enc = ntru.encapsulate()
+# alice_shared_secret = ntru.decapsulate(enc)
+# print("NTRU KEM Test:",bob_shared_secret == alice_shared_secret)
+
+
+poly = ntru.random_poly_ternary()
+print("poly",poly)
+poly_mod = [ Mod(a,p) for a in poly ]
+print("Mod",poly_mod)
+poly_lift = [ lift(a) for a in poly_mod ]
+print("lift",poly_lift)
 
