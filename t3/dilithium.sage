@@ -1,5 +1,4 @@
 from cryptography.hazmat.primitives import hashes 
-import time
 
 class Weak:
     k = 3
@@ -68,17 +67,9 @@ class Dilithium:
             c_poly = self.Rq(c)
             z = y + c_poly * self.s1
 
-            aux11 = self.sup_norm(z)
-            aux12 = self.gamma1 - self.beta
-            torf1 = aux11 >= aux12
+            if (self.sup_norm(z) >= self.gamma1 - self.beta) and (self.sup_norm([self.low_bits(Ay-c_poly*self.s2, 2*self.gamma2)]) >= self.gamma2 - self.beta):
+                z = None
 
-            tmp = self.low_bits(Ay-c_poly*self.s2, 2*self.gamma2)
-            aux21 = self.sup_norm([tmp])
-            aux22 = self.gamma2 - self.beta
-            torf2 = aux21 >= aux22
-
-            if torf1 and torf2:
-               z = None
         return (z,c)
 
 
@@ -181,23 +172,3 @@ print("Test 2 (Must be False):",dilithium.verify(b"adeus mundo cruel", sig))
 dilithium_other = Dilithium(params=Weak)
 sig = dilithium.sign(b"ola mundo cruel")
 print("Test 3 (Must be False):",dilithium_other.verify(b"ola mundo cruel",sig))
-
-######## Benchmarks ########
-
-# def benchmark(foo):
-#     start = time.time()
-#     foo()
-#     end = time.time()
-#     return end - start
-
-# def sign_verify(params):
-#     def __benchmark_test():
-#         dilithium = Dilithium(params=params)
-#         sig = dilithium.sign(b"ola mundo cruel")
-#         dilithium.verify(b"ola mundo cruel", sig)
-#     return __benchmark_test
-
-# print("sign_verify for Weak params:",benchmark(sign_verify(Weak)))
-# print("sign_verify for Medium params:",benchmark(sign_verify(Medium)))
-# print("sign_verify for Recommended params:",benchmark(sign_verify(Recommended)))
-# print("sign_verify for VeryHigh params:",benchmark(sign_verify(VeryHigh)))
