@@ -2,6 +2,7 @@ import os
 from cryptography.hazmat.primitives import hashes
 
 
+
 class pI:
     n = 1024
     sigma = 8.5
@@ -34,11 +35,16 @@ class qTesla:
         self.h = params.h
         self.Le = params.Le
         self.Ls = params.Ls
+        self.E = self.Le
+        self.S = self.Ls
         self.B = params.B
         self.d = params.d
         self.k = params.k
         self.K = 256
         self.alfa = self.sigma / self.q
+
+        # Define sup_norm()
+        self.sup_norm = max
 
         # Define Fields
         Zx.<x> = ZZ[]
@@ -69,40 +75,98 @@ class qTesla:
                 if self.checkE(e_i):
                     e.append(e_i)
                     break
-            t.append(a[i] * s + e[i]) 
+            t.append(a[i] * s + e[i])
         
-        self.g = self.G(t)
-        # Public Key : (t, seed_a)
-        # Private Key :  (s, e, seed_a, seed_y, g)
-
+        g = self.G(t)
+        
+        # Public Key
+        self.pub_key = (t, seed_a)
+        # Private Key
+        self.priv_key = (s, e, seed_a, seed_y, g)
 
     def sign(self, m):
-        pass
+        s, e, seed_a, seed_y, g = self.priv_key
+
+        counter = 1
+        r = os.urandom(self.K // 8)
+        rand = self.prf2(seed_y, r, self.G(m))
+
+        while True:
+            y = self.ySampler(rand, counter)
+            a = self.genA(seed_a)
+
+            v = []
+            for i in range(self.k):
+                v.append(a[i] * y)
+
+            c_prime = self.H(v, self.G(m), g)
+            c = self.sparse_to_poly(self.Enc(c_prime))
+            z = y + s*c
+
+            # Check if belongs to R[B-S]
+            belongs = True
+            for c in z:
+                if c > abs(self.B - self.S):
+                    belongs = False
+            
+            if not belongs:
+                counter += 1
+                continue
+            
+            w = []
+            #torf = False
+            for i in range(self.k):
+                w.append(v[i] - e[i] * c)
+                if self.sup_norm(w[i]) >= 2**(self.d-1) - self.E or self.sup_norm(w[i]) >= self.q // 2 - self.E:
+                    counter += 1
+                    continue
+                    #torf = True
+                    #break
+            #if not torf:
+            return (z, c_prime)
 
     def verify(self, m, sig):
-        pass
+        (t, seed_a) = self.pub_key
+        z, c_prime = sig
+        c = self.sparse_to_poly(self.Enc(c_prime))
+        a = self.genA(seed_a)
+
+        w = []
+        for i in range(self.k):
+            w.append(a[i] * z - t[i]*c)
+        
+        # Check if belongs to R[B-S]
+        belongs = True
+        for c in z:
+            if c > abs(self.B - self.S):
+                belongs = False
+            
+        if not belongs or c_prime != self.H(w,self.G(m),self.G(t)):
+            return False
+        return True
+
         
     ########### Auxiliar Functions ###########
 
     # FIXME: Possivelmente mal defenido
     def checkE(self, e):
-        my_sum = 0
+        res = 0
         e_list = list(e)
         e_list.sort(reverse=True)
         for i in range(0,self.h):
-            my_sum += e_list[i]
+            res += e_list[i]
 
-        return (my_sum > self.Le)
+        return (res > self.Le)
 
     # FIXME: Possivelmente mal defenido
     def checkS(self, s):
-        my_sum = 0
+        res = 0
         s_list = list(s)
         s_list.sort(reverse=True)
         for i in range(0,self.h):
-            my_sum += s_list[i]
+            res += s_list[i]
 
-        return (my_sum > self.Ls)
+        return (res > self.Ls)
 
 
     def prf1(self, pre_seed):
@@ -117,6 +181,13 @@ class qTesla:
         seed_y = seed[self.k+2:self.k+3]
 
         return seed_s, seeds_e, seed_a, seed_y
+
+    def prf2(self, seed, r, g_m):
+        xof = hashes.Hash(hashes.SHAKE256(int(self.K // 8)))
+        xof.update(seed)
+        xof.update(r)
+        xof.update(g_m)
+        return xof.finalize()
 
     def genA(self, seed_a):
         # Convert seed_a to int and set seed for
@@ -137,19 +208,82 @@ class qTesla:
     def G(self, m):
         if type(m) == list:
             # Convert poly to bytes form
-            m = b''.join([ b''.join([ int(p).to_bytes(4,"big") for c in p ]) for p in m ])
+            m = b''.join([ b''.join([ int(c).to_bytes(4,"big") for c in p ]) for p in m ])
         
         xof = hashes.Hash(hashes.SHAKE256(int(40)))
         xof.update(m)
         return xof.finalize()
 
-        
+    # FIXME: Provavelmente mal defenido
+    def ySampler(self, seed, nounce):
+        seed_nounce = int.from_bytes(seed, "big") + nounce
+        set_random_seed(seed_nounce)
+        return self.Rq.random_element(x=-self.B, y=self.B+1, distribution='uniform')
 
-    
+    def H(self, v, g_m, g_t):
+        pow_2_d = 2**self.d
+        w = []
+        for i in range(self.k):
+            for j in range(self.n):
+                val = int(v[i][j]) % (pow_2_d)
+                
+                if val > 2**(self.d-1):
+                    val -= pow_2_d
+                wij = (v[i][j] - val) // pow_2_d
+                w.append(int(wij).to_bytes(1,"big"))
+        
+        w = b''.join(w + [g_m, g_t])
+        xof = hashes.Hash(hashes.SHAKE256(int(self.K // 8)))
+        xof.update(w)
+        return xof.finalize()
+
+    def Enc(self, c_prime):
+        D = 0
+        cnt = 0
+        rate_xof = 168
+        r = self.cSHAKE128(c_prime, rate_xof, D)
+
+        pos_list = []
+        sign_list = []
+
+        i = 0
+        c = [0] * self.n
+        while i < self.h:
+            if(cnt > (rate_xof - 3)):
+                D += 1
+                cnt = 0
+                r = self.cSHAKE128(c_prime, rate_xof, D)
+            pos = int.from_bytes(r[cnt:(cnt+2)],'big') % self.n
+            if c[pos] == 0:
+                c[pos] = -1 if (r[cnt+2] % 2 == 1) else 1
+                pos_list.append(pos)
+                sign_list.append(c[pos])
+                i += 1
+            cnt += 3
+        return (pos_list, sign_list)
+
+    def cSHAKE128(self, c_prime, rate, D):
+        xof = hashes.Hash(hashes.SHAKE256(int(rate)))
+        xof.update(int(D).to_bytes(136,"big") + c_prime)
+        return xof.finalize()
+
+    def sparse_to_poly(self, c):
+        pos_list, sign_list = c
+        poly_list = [0] * self.n
+        for pos, sign in zip(pos_list,sign_list):
+            poly_list[pos] = sign
+        return self.Rq(poly_list)
+
+
+
 qtesla = qTesla(pI)
+sig = qtesla.sign(b"ola mundo cruel")
+#result = qtesla.verify(b"ola mundo cruel",sig)
+print("Test 1 (Must be True):", result)
 
 
 ############## Testing ##############
 
-#Zq.<z> = GF(pI.q)[]
-#Rq.<z> = Zq.quotient(z^pI.n+1)
+#Zq.<z> = GF(3)[]
+#Rq.<z> = Zq.quotient(z^256+1)
+# c = os.urandom(32)

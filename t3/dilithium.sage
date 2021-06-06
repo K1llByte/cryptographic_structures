@@ -54,7 +54,7 @@ class Dilithium:
         self.s2 = self.sample(self.eta, self.k)
         self.t = self.A * self.s1 + self.s2
         # Public Key : A, t
-        # Private Key : s1, s2    
+        # Private Key : s1, s2
 
     def sign(self, m):
         z = None
