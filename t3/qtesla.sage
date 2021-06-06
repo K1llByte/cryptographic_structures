@@ -109,6 +109,8 @@ class qTesla:
                 if c > abs(self.B - self.S):
                     belongs = False
             
+            print("Iteration")
+
             if not belongs:
                 counter += 1
                 continue
