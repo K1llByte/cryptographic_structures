@@ -102,6 +102,7 @@ class qTesla:
             print("v:",v[0][0])
             c_prime = self.H(v, self.G(m), g)
             c = self.sparse_to_poly(self.Enc(c_prime))
+            self.tmp = c
             #sc = self.sparse_mul(self.Enc(c_prime), s)
             #print("sc",sc)
             #print("Rq(sc)",self.Rq(sc))
@@ -138,6 +139,7 @@ class qTesla:
         (t, seed_a) = self.pub_key
         z, c_prime = sig
         c = self.sparse_to_poly(self.Enc(c_prime))
+        print(c == self.tmp)
         a = self.genA(seed_a)
 
         w = []
