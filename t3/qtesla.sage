@@ -99,21 +99,28 @@ class qTesla:
             for i in range(self.k):
                 v.append(a[i] * y)
 
+            print("v:",v[0][0])
             c_prime = self.H(v, self.G(m), g)
             c = self.sparse_to_poly(self.Enc(c_prime))
+            #sc = self.sparse_mul(self.Enc(c_prime), s)
+            #print("sc",sc)
+            #print("Rq(sc)",self.Rq(sc))
+
             z = y + s*c
+            #z = y + self.Rq(sc)
 
             # Check if belongs to R[B-S]
             belongs = True
+            tmp = abs(self.B - self.S)
             for c in z:
-                if c > abs(self.B - self.S):
+                #print("c:",c)
+                #print("B-S:",tmp)
+                if c > tmp and c < self.q - tmp:
                     belongs = False
-            
-            print("Iteration")
 
-            if not belongs:
-                counter += 1
-                continue
+            #if not belongs:
+            #    counter += 1
+            #    continue
             
             w = []
             #torf = False
@@ -142,12 +149,13 @@ class qTesla:
         for c in z:
             if c > abs(self.B - self.S):
                 belongs = False
-            
-        if not belongs or c_prime != self.H(w,self.G(m),self.G(t)):
+
+        #print("val1:",c_prime)
+        print("v:",w[0][0])
+        if c_prime != self.H(w,self.G(m),self.G(t)) : # or not belongs
             return False
         return True
 
-        
     ########### Auxiliar Functions ###########
 
     # FIXME: Possivelmente mal defenido
@@ -276,15 +284,29 @@ class qTesla:
             poly_list[pos] = sign
         return self.Rq(poly_list)
 
+    def sparse_mul(self, c, poly):
+        (pos_list,sign_list) = c
+        f = [0] * self.n
+        for i in range(0,self.h):
+            pos = pos_list[i]
+            for j in range(0,pos):
+                f[j] = f[j] - sign_list[i]*poly[j+self.n-pos]
+            for j in range(pos,self.n):
+                f[j] = f[j] + sign_list[i]*poly[j-pos]
+        return f
+
 
 
 qtesla = qTesla(pI)
 sig = qtesla.sign(b"ola mundo cruel")
-#result = qtesla.verify(b"ola mundo cruel",sig)
+result = qtesla.verify(b"ola mundo cruel",sig)
 print("Test 1 (Must be True):", result)
 
 
 ############## Testing ##############
+
+# Zx.<x> = ZZ[]
+# R.<x> = Zx.quotient(x^256+1)
 
 #Zq.<z> = GF(3)[]
 #Rq.<z> = Zq.quotient(z^256+1)
