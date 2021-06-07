@@ -76,7 +76,8 @@ class qTesla:
                     e.append(e_i)
                     break
             t.append(a[i] * s + e[i])
-        
+            #t.append(self.mod_list(self.poly_add(self.poly_mul(a[i], s) , e[i]) , self.q) )
+
         g = self.G(t)
         
         # Public Key
@@ -97,36 +98,41 @@ class qTesla:
 
             v = []
             for i in range(self.k):
-                v.append(a[i] * y)
+                # a[i] * y
+                v.append(self.mod_list(self.poly_mul(a[i], y), self.q))
 
-            print("v:",v[0][0])
+            self.tmp = v
+            # print("v:",v[0][0])
             c_prime = self.H(v, self.G(m), g)
-            c = self.sparse_to_poly(self.Enc(c_prime))
-            self.tmp = c
+            c = self.sparse_to_list(self.Enc(c_prime))
+            #print(len(list(filter(lambda x: x < 0, c))))
             #sc = self.sparse_mul(self.Enc(c_prime), s)
             #print("sc",sc)
             #print("Rq(sc)",self.Rq(sc))
 
-            z = y + s*c
-            #z = y + self.Rq(sc)
+            #z = y + s*c
+            
+            #print(len(list(filter(lambda x: x < 0, self.poly_mul(s, c)))))
+
+            z = self.poly_add(y, self.poly_mul(s, c))
+            # print(len(list(filter(lambda x: x < 0, z))))
 
             # Check if belongs to R[B-S]
             belongs = True
             tmp = abs(self.B - self.S)
-            for c in z:
+            for coef in z:
                 #print("c:",c)
                 #print("B-S:",tmp)
-                if c > tmp and c < self.q - tmp:
+                if abs(coef) > tmp:
                     belongs = False
 
-            #if not belongs:
-            #    counter += 1
-            #    continue
+            # if not belongs:
+            #     counter += 1
+            #     continue
             
             w = []
-            #torf = False
             for i in range(self.k):
-                w.append(v[i] - e[i] * c)
+                w.append(self.mod_list(self.poly_sub(v[i], self.poly_mul(e[i], c)), self.q))
                 if self.sup_norm(w[i]) >= 2**(self.d-1) - self.E or self.sup_norm(w[i]) >= self.q // 2 - self.E:
                     counter += 1
                     continue
@@ -136,15 +142,16 @@ class qTesla:
             return (z, c_prime)
 
     def verify(self, m, sig):
-        (t, seed_a) = self.pub_key
+        t, seed_a = self.pub_key
         z, c_prime = sig
-        c = self.sparse_to_poly(self.Enc(c_prime))
-        print(c == self.tmp)
+        c = self.sparse_to_list(self.Enc(c_prime))
         a = self.genA(seed_a)
 
         w = []
         for i in range(self.k):
-            w.append(a[i] * z - t[i]*c)
+            w.append(self.mod_list(self.poly_sub(self.poly_mul(a[i], z), self.poly_mul(t[i], c)), self.q))
+            #self.poly_sub(self.poly_mul(a[i], z), self.poly_mul(t[i], c))
+            # w.append(a[i] * z - t[i]*c)
         
         # Check if belongs to R[B-S]
         belongs = True
@@ -153,7 +160,12 @@ class qTesla:
                 belongs = False
 
         #print("val1:",c_prime)
-        print("v:",w[0][0])
+        # print("v:",w[0])
+        
+        for c1, c2 in zip(w[0], self.tmp[0]):
+            if c1 != c2:
+                print("Different:", c1, c2)
+        # print("v:",w[0] == self.tmp[0])
         if c_prime != self.H(w,self.G(m),self.G(t)) : # or not belongs
             return False
         return True
@@ -230,7 +242,7 @@ class qTesla:
     def ySampler(self, seed, nounce):
         seed_nounce = int.from_bytes(seed, "big") + nounce
         set_random_seed(seed_nounce)
-        return self.Rq.random_element(x=-self.B, y=self.B+1, distribution='uniform')
+        return self.R.random_element(x=-self.B, y=self.B+1, distribution='uniform')
 
     def H(self, v, g_m, g_t):
         pow_2_d = 2**self.d
@@ -279,23 +291,37 @@ class qTesla:
         xof.update(int(D).to_bytes(136,"big") + c_prime)
         return xof.finalize()
 
-    def sparse_to_poly(self, c):
+    def sparse_to_list(self, c):
         pos_list, sign_list = c
         poly_list = [0] * self.n
         for pos, sign in zip(pos_list,sign_list):
             poly_list[pos] = sign
-        return self.Rq(poly_list)
+        return poly_list
 
-    def sparse_mul(self, c, poly):
-        (pos_list,sign_list) = c
-        f = [0] * self.n
-        for i in range(0,self.h):
-            pos = pos_list[i]
-            for j in range(0,pos):
-                f[j] = f[j] - sign_list[i]*poly[j+self.n-pos]
-            for j in range(pos,self.n):
-                f[j] = f[j] + sign_list[i]*poly[j-pos]
-        return f
+    # def sparse_mul(self, c, poly):
+    #     (pos_list,sign_list) = c
+    #     f = [0] * self.n
+    #     for i in range(0,self.h):
+    #         pos = pos_list[i]
+    #         for j in range(0,pos):
+    #             f[j] = f[j] - sign_list[i]*poly[j+self.n-pos]
+    #         for j in range(pos,self.n):
+    #             f[j] = f[j] + sign_list[i]*poly[j-pos]
+    #     return f
+
+    def poly_mul(self, p1, p2):
+        return [ int(c1)*int(c2) for c1, c2 in zip(p1, p2) ]
+
+    def poly_add(self, p1, p2):
+        return [ int(c1)+int(c2) for c1, c2 in zip(p1, p2) ]
+
+    def poly_sub(self, p1, p2):
+        return [ int(c1)-int(c2) for c1, c2 in zip(p1, p2) ]
+
+    def mod_list(self, l, m):
+        return [ mod(c,m) for c in l ]
+
+    
 
 
 
