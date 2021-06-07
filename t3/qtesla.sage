@@ -162,9 +162,9 @@ class qTesla:
         #print("val1:",c_prime)
         # print("v:",w[0])
         
-        for c1, c2 in zip(w[0], self.tmp[0]):
-            if c1 != c2:
-                print("Different:", c1, c2)
+        # for c1, c2 in zip(w[0], self.tmp[0]):
+        #     if c1 != c2:
+        #         print("Different:", c1, c2)
         # print("v:",w[0] == self.tmp[0])
         if c_prime != self.H(w,self.G(m),self.G(t)) : # or not belongs
             return False
@@ -321,15 +321,28 @@ class qTesla:
     def mod_list(self, l, m):
         return [ mod(c,m) for c in l ]
 
-    
+######## Tests ########
 
-
-
-qtesla = qTesla(pI)
+# Test 1
+# Verificar se o esquema valida
+# corretamente uma assinatura
+qtesla = qTesla(params=pI)
 sig = qtesla.sign(b"ola mundo cruel")
 result = qtesla.verify(b"ola mundo cruel",sig)
 print("Test 1 (Must be True):", result)
 
+# # Test 2
+# # Verificar se o esquema reconhece quando
+# # os dados assinados são diferentes
+# sig = qtesla.sign(b"ola mundo cruel")
+# print("Test 2 (Must be False):", qtesla.verify(b"adeus mundo cruel", sig))
+
+# # Test 3
+# # Verificar se entre instancias diferentes
+# # não há relações
+# qtesla_other = qTesla(params=pI)
+# sig = qtesla.sign(b"ola mundo cruel")
+# print("Test 3 (Must be False):", qtesla_other.verify(b"ola mundo cruel",sig))
 
 ############## Testing ##############
 
