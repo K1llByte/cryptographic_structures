@@ -1,8 +1,6 @@
 import os
 from cryptography.hazmat.primitives import hashes
 
-
-
 class pI:
     n = 1024
     sigma = 8.5
@@ -172,24 +170,20 @@ class qTesla:
 
     ########### Auxiliar Functions ###########
 
-    # FIXME: Possivelmente mal defenido
     def checkE(self, e):
         res = 0
         e_list = list(e)
         e_list.sort(reverse=True)
         for i in range(0,self.h):
             res += e_list[i]
-
         return (res > self.Le)
 
-    # FIXME: Possivelmente mal defenido
     def checkS(self, s):
         res = 0
         s_list = list(s)
         s_list.sort(reverse=True)
-        for i in range(0,self.h):
+        for i in range(self.h):
             res += s_list[i]
-
         return (res > self.Ls)
 
 
@@ -326,10 +320,10 @@ class qTesla:
 # Test 1
 # Verificar se o esquema valida
 # corretamente uma assinatura
-qtesla = qTesla(params=pI)
-sig = qtesla.sign(b"ola mundo cruel")
-result = qtesla.verify(b"ola mundo cruel",sig)
-print("Test 1 (Must be True):", result)
+#qtesla = qTesla(params=pI)
+#sig = qtesla.sign(b"ola mundo cruel")
+#result = qtesla.verify(b"ola mundo cruel",sig)
+#print("Test 1 (Must be True):", result)
 
 # # Test 2
 # # Verificar se o esquema reconhece quando
@@ -352,3 +346,8 @@ print("Test 1 (Must be True):", result)
 #Zq.<z> = GF(3)[]
 #Rq.<z> = Zq.quotient(z^256+1)
 # c = os.urandom(32)
+
+qtesla = qTesla(params=pI)
+s = qtesla.GaussSampler(b'\x00'*32, 0)
+print(s)
+print(qtesla.checkS(s))
